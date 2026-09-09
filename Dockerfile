@@ -52,6 +52,7 @@ ENV PORT=8080
 ENV DATA_DIR=/data
 ENV ACCESS_TOKEN=Fraz1234
 ENV ALLOW_SOFTWARE_EMULATION=true
+ENV ANDROID_IMAGE_URL=https://archive.org/download/android-x86-8.1-r6/android-x86-8.1-r6.iso
 EXPOSE 8080
 
 # 10. Start the Android Cloud Device supervisor
