@@ -44,10 +44,8 @@ RUN npm install --omit=dev && npm cache clean --force
 # 7. Return to main application directory
 WORKDIR /app
 
-# 8. Define persistent data volume mount
-VOLUME ["/data"]
-
-# 9. Railway configuration (dynamic $PORT support)
+# 8. Railway configuration (dynamic $PORT support)
+# Persistent data volume should be mounted at /data via Railway Dashboard (Volumes tab)
 ENV PORT=8080
 ENV DATA_DIR=/data
 EXPOSE 8080
