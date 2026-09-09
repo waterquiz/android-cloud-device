@@ -140,11 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
         hideOverlay();
       } else if (data.state === 'BOOTING') {
         setDeviceBadge('BOOTING', 'status-booting');
-        if (!isWsConnected) {
-          setOverlay('Android Booting', 'Waiting for Android OS to complete startup... (Click below to view boot output)', true);
-        } else {
-          hideOverlay();
-        }
+        hideOverlay();
       } else if (data.state === 'MISSING_IMAGE') {
         setDeviceBadge('MISSING IMAGE', 'status-error');
         setOverlay('No Bootable Android Image Found', 'The virtual hard drive is empty. Provide an Android-x86 ISO URL under "Android OS Image Setup" or set ANDROID_IMAGE_URL in Railway.', false);
