@@ -151,24 +151,35 @@ if [ "$START_EMULATOR" = true ]; then
     # Start QEMU in background
     # - Display: VNC on 127.0.0.1:0 (port 5900)
     # - Net: User mode with ADB port 5555 forwarded to guest port 5555
-    # - Input: Tablet device for absolute touch/pointer coordinate mapping
+    # - Input: -usb -device usb-tablet for absolute touch/pointer coordinate mapping
+    # - Graphics: -vga std
     qemu-system-x86_64 \
         $QEMU_ACCEL \
         -m "${RAM_SIZE}" \
         -smp "${CPU_CORES}" \
+        -vga std \
+        -usb \
+        -device usb-tablet \
         -drive "file=${SYSTEM_IMAGE},if=virtio" \
         -drive "file=${DATA_IMAGE},if=virtio" \
         -net nic,model=virtio \
         -net "user,hostfwd=tcp:127.0.0.1:${ADB_PORT}-:5555" \
         -vnc "127.0.0.1:0" \
-        -device usb-tablet \
-        -no-user-config \
-        -nodefaults \
         -serial file:"$DATA_DIR/logs/qemu_serial.log" \
         > "$EMULATOR_LOG" 2>&1 &
     
     QEMU_PID=$!
     echo "[EMULATOR] QEMU started with PID $QEMU_PID"
+
+    # Verify QEMU stayed alive
+    sleep 2
+    if ! kill -0 "$QEMU_PID" 2>/dev/null; then
+        echo "[ERROR] QEMU failed to start or crashed immediately!" | tee -a "$SYSTEM_LOG"
+        if [ -f "$EMULATOR_LOG" ]; then
+            cat "$EMULATOR_LOG" | tee -a "$SYSTEM_LOG"
+        fi
+        echo "CRASHED" > "$STATE_FILE"
+    fi
 
     # Start ADB daemon
     echo "[ADB] Starting local ADB server..."
@@ -180,6 +191,12 @@ if [ "$START_EMULATOR" = true ]; then
         MAX_WAIT=120
         ELAPSED=0
         while [ $ELAPSED -lt $MAX_WAIT ]; do
+            if [ -n "$QEMU_PID" ] && ! kill -0 "$QEMU_PID" 2>/dev/null; then
+                echo "[BOOT-MONITOR] QEMU process terminated unexpectedly." >> "$SYSTEM_LOG"
+                echo "CRASHED" > "$STATE_FILE"
+                exit 1
+            fi
+
             # Attempt to connect to local forwarded ADB port
             adb connect "127.0.0.1:${ADB_PORT}" >/dev/null 2>&1 || true
             

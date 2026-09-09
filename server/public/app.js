@@ -108,6 +108,9 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (data.state === 'BOOTING') {
         setDeviceBadge('BOOTING', 'status-booting');
         setOverlay('Android Booting', 'Waiting for Android OS to complete startup...', true);
+      } else if (data.state === 'CRASHED') {
+        setDeviceBadge('CRASHED', 'status-error');
+        setOverlay('Emulator Failed', data.diagnostic || 'QEMU process exited unexpectedly. Check logs below.', false);
       } else if (data.state === 'MISSING_KVM') {
         setDeviceBadge('MISSING KVM', 'status-error');
         setOverlay('Hardware Virtualization Missing', 'Railway standard containers do not expose /dev/kvm. See Diagnostic Notice.', false);

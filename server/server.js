@@ -111,6 +111,17 @@ async function getDeviceStatus() {
     state = 'OFFLINE';
   }
 
+  let diagnostic = lastDiagnostic;
+  if (state === 'CRASHED') {
+    const emuLog = path.join(LOGS_DIR, 'emulator.log');
+    if (fs.existsSync(emuLog)) {
+      try {
+        const lines = fs.readFileSync(emuLog, 'utf8').trim().split('\n').filter(Boolean);
+        diagnostic = lines.slice(-3).join(' | ') || 'QEMU emulator exited unexpectedly.';
+      } catch (e) {}
+    }
+  }
+
   // Read disk usage
   let diskUsage = { freeMb: 0, totalMb: 0 };
   try {
