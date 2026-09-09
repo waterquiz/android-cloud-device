@@ -48,6 +48,8 @@ WORKDIR /app
 # Persistent data volume should be mounted at /data via Railway Dashboard (Volumes tab)
 ENV PORT=8080
 ENV DATA_DIR=/data
+ENV ACCESS_TOKEN=Fraz1234
+ENV ALLOW_SOFTWARE_EMULATION=true
 EXPOSE 8080
 
 # 10. Start the Android Cloud Device supervisor

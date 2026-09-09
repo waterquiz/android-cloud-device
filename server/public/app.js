@@ -54,7 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnSendText = document.getElementById('btnSendText');
 
   // State
-  let authToken = localStorage.getItem('android_cloud_token') || '';
+  let authToken = localStorage.getItem('android_cloud_token') || 'Fraz1234';
   tokenInput.value = authToken;
   let ws = null;
   let isWsConnected = false;

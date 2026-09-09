@@ -24,7 +24,7 @@ const Busboy = require('busboy');
 // Load environment and device configuration
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const HOST = '0.0.0.0';
-const ACCESS_TOKEN = process.env.ACCESS_TOKEN || '';
+const ACCESS_TOKEN = process.env.ACCESS_TOKEN || 'Fraz1234';
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const APK_DIR = path.join(DATA_DIR, 'apks');
 const LOGS_DIR = path.join(DATA_DIR, 'logs');
@@ -32,7 +32,7 @@ const STATE_FILE = path.join(DATA_DIR, 'android', 'device_state');
 const VNC_PORT = parseInt(process.env.VNC_PORT || '5900', 10);
 const ADB_PORT = parseInt(process.env.ADB_PORT || '5555', 10);
 const MAX_UPLOAD_MB = parseInt(process.env.MAX_UPLOAD_MB || '250', 10);
-const ALLOW_SOFTWARE_EMULATION = (process.env.ALLOW_SOFTWARE_EMULATION || 'false').toLowerCase() === 'true';
+const ALLOW_SOFTWARE_EMULATION = (process.env.ALLOW_SOFTWARE_EMULATION || 'true').toLowerCase() === 'true';
 
 // Ensure directories exist
 for (const dir of [DATA_DIR, APK_DIR, LOGS_DIR, path.join(DATA_DIR, 'android')]) {

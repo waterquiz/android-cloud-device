@@ -9,6 +9,7 @@ echo "          Starting Android Cloud Device on Railway"
 echo "================================================================================"
 
 # Preserve incoming environment variables
+_ENV_ACCESS_TOKEN="$ACCESS_TOKEN"
 _ENV_ALLOW_SOFTWARE_EMULATION="$ALLOW_SOFTWARE_EMULATION"
 _ENV_RAM_SIZE="$RAM_SIZE"
 _ENV_CPU_CORES="$CPU_CORES"
@@ -27,6 +28,7 @@ if [ -f "$CONF_FILE" ]; then
 fi
 
 # Apply environment variable overrides (environment variables take top precedence)
+ACCESS_TOKEN="${_ENV_ACCESS_TOKEN:-${ACCESS_TOKEN:-Fraz1234}}"
 ALLOW_SOFTWARE_EMULATION="${_ENV_ALLOW_SOFTWARE_EMULATION:-${ALLOW_SOFTWARE_EMULATION:-true}}"
 RAM_SIZE="${_ENV_RAM_SIZE:-${RAM_SIZE:-2048}}"
 CPU_CORES="${_ENV_CPU_CORES:-${CPU_CORES:-2}}"
@@ -36,7 +38,7 @@ VNC_PORT="${_ENV_VNC_PORT:-${VNC_PORT:-5900}}"
 DATA_DIR="${_ENV_DATA_DIR:-${DATA_DIR:-/data}}"
 PORT="${_ENV_PORT:-${PORT:-8080}}"
 
-export ALLOW_SOFTWARE_EMULATION RAM_SIZE CPU_CORES DISK_SIZE ADB_PORT VNC_PORT DATA_DIR PORT
+export ACCESS_TOKEN ALLOW_SOFTWARE_EMULATION RAM_SIZE CPU_CORES DISK_SIZE ADB_PORT VNC_PORT DATA_DIR PORT
 
 echo "[CONFIG] RAM: ${RAM_SIZE}MB | Cores: ${CPU_CORES} | Port: ${PORT}"
 echo "[CONFIG] Allow Software Emulation: ${ALLOW_SOFTWARE_EMULATION}"
