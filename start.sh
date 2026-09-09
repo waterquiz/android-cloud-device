@@ -8,6 +8,16 @@ echo "==========================================================================
 echo "          Starting Android Cloud Device on Railway"
 echo "================================================================================"
 
+# Preserve incoming environment variables
+_ENV_ALLOW_SOFTWARE_EMULATION="$ALLOW_SOFTWARE_EMULATION"
+_ENV_RAM_SIZE="$RAM_SIZE"
+_ENV_CPU_CORES="$CPU_CORES"
+_ENV_DISK_SIZE="$DISK_SIZE"
+_ENV_ADB_PORT="$ADB_PORT"
+_ENV_VNC_PORT="$VNC_PORT"
+_ENV_DATA_DIR="$DATA_DIR"
+_ENV_PORT="$PORT"
+
 # Load configuration file if present
 CONF_FILE="/app/config/device.conf"
 if [ -f "$CONF_FILE" ]; then
@@ -16,17 +26,20 @@ if [ -f "$CONF_FILE" ]; then
     source "$CONF_FILE"
 fi
 
-# Apply environment variable overrides
-RAM_SIZE="${RAM_SIZE:-2048}"
-CPU_CORES="${CPU_CORES:-2}"
-DISK_SIZE="${DISK_SIZE:-8G}"
-ADB_PORT="${ADB_PORT:-5555}"
-VNC_PORT="${VNC_PORT:-5900}"
-DATA_DIR="${DATA_DIR:-/data}"
-ALLOW_SOFTWARE_EMULATION="${ALLOW_SOFTWARE_EMULATION:-false}"
-PORT="${PORT:-8080}"
+# Apply environment variable overrides (environment variables take top precedence)
+ALLOW_SOFTWARE_EMULATION="${_ENV_ALLOW_SOFTWARE_EMULATION:-${ALLOW_SOFTWARE_EMULATION:-true}}"
+RAM_SIZE="${_ENV_RAM_SIZE:-${RAM_SIZE:-2048}}"
+CPU_CORES="${_ENV_CPU_CORES:-${CPU_CORES:-2}}"
+DISK_SIZE="${_ENV_DISK_SIZE:-${DISK_SIZE:-8G}}"
+ADB_PORT="${_ENV_ADB_PORT:-${ADB_PORT:-5555}}"
+VNC_PORT="${_ENV_VNC_PORT:-${VNC_PORT:-5900}}"
+DATA_DIR="${_ENV_DATA_DIR:-${DATA_DIR:-/data}}"
+PORT="${_ENV_PORT:-${PORT:-8080}}"
+
+export ALLOW_SOFTWARE_EMULATION RAM_SIZE CPU_CORES DISK_SIZE ADB_PORT VNC_PORT DATA_DIR PORT
 
 echo "[CONFIG] RAM: ${RAM_SIZE}MB | Cores: ${CPU_CORES} | Port: ${PORT}"
+echo "[CONFIG] Allow Software Emulation: ${ALLOW_SOFTWARE_EMULATION}"
 echo "[CONFIG] Storage directory: ${DATA_DIR}"
 
 # ------------------------------------------------------------------------------
