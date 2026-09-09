@@ -816,6 +816,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Periodic polling
+  connectVnc();
   fetchStatus();
   fetchInstalledApps();
   setInterval(fetchStatus, 4000);
