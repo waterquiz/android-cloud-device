@@ -140,7 +140,11 @@ document.addEventListener('DOMContentLoaded', () => {
         hideOverlay();
       } else if (data.state === 'BOOTING') {
         setDeviceBadge('BOOTING', 'status-booting');
-        setOverlay('Android Booting', 'Waiting for Android OS to complete startup... (Click below to view boot output)', true);
+        if (!isWsConnected) {
+          setOverlay('Android Booting', 'Waiting for Android OS to complete startup... (Click below to view boot output)', true);
+        } else {
+          hideOverlay();
+        }
       } else if (data.state === 'MISSING_IMAGE') {
         setDeviceBadge('MISSING IMAGE', 'status-error');
         setOverlay('No Bootable Android Image Found', 'The virtual hard drive is empty. Provide an Android-x86 ISO URL under "Android OS Image Setup" or set ANDROID_IMAGE_URL in Railway.', false);
@@ -241,9 +245,18 @@ document.addEventListener('DOMContentLoaded', () => {
       processRfbPackets();
     };
 
+    let keepAliveTimer = setInterval(() => {
+      if (ws && ws.readyState === WebSocket.OPEN && rfbHandshakeStep === 4) {
+        requestFramebufferUpdate(0, 0, fbWidth, fbHeight, 1);
+      }
+    }, 15000);
+
     ws.onclose = () => {
+      clearInterval(keepAliveTimer);
       isWsConnected = false;
-      setOverlay('Display Disconnected', 'VNC display stream disconnected.', false);
+      setTimeout(() => {
+        if (!isWsConnected) connectVnc();
+      }, 2000);
     };
 
     ws.onerror = () => {
@@ -309,6 +322,7 @@ document.addEventListener('DOMContentLoaded', () => {
       rfbBuffer = rfbBuffer.slice(24 + nameLength);
       rfbHandshakeStep = 4; // Ready for normal framebuffer updates
 
+      userDismissedOverlay = true;
       hideOverlay();
 
       // Request full initial update
@@ -451,6 +465,56 @@ document.addEventListener('DOMContentLoaded', () => {
     const c = getCanvasCoords(e);
     sendPointerEvent(0, c.x, c.y);
   }, { passive: false });
+
+  // ============================================================================
+  // VNC Keyboard Input Forwarding
+  // ============================================================================
+  function sendKeyEvent(down, keysym) {
+    if (!ws || ws.readyState !== WebSocket.OPEN || rfbHandshakeStep !== 4) return;
+    const buf = new Uint8Array(8);
+    buf[0] = 4; // KeyEvent
+    buf[1] = down ? 1 : 0;
+    buf[2] = 0;
+    buf[3] = 0;
+    buf[4] = (keysym >> 24) & 0xFF;
+    buf[5] = (keysym >> 16) & 0xFF;
+    buf[6] = (keysym >> 8) & 0xFF;
+    buf[7] = keysym & 0xFF;
+    ws.send(buf);
+  }
+
+  function mapKeyToKeysym(key) {
+    if (key === 'Enter') return 0xFF0D;
+    if (key === 'Escape') return 0xFF1B;
+    if (key === 'Backspace') return 0xFF08;
+    if (key === 'Tab') return 0xFF09;
+    if (key === 'ArrowUp') return 0xFF52;
+    if (key === 'ArrowDown') return 0xFF54;
+    if (key === 'ArrowLeft') return 0xFF51;
+    if (key === 'ArrowRight') return 0xFF53;
+    if (key === 'Home') return 0xFF50;
+    if (key === 'End') return 0xFF57;
+    if (key === 'PageUp') return 0xFF55;
+    if (key === 'PageDown') return 0xFF56;
+    if (key.length === 1) return key.charCodeAt(0);
+    return null;
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+    const keysym = mapKeyToKeysym(e.key);
+    if (keysym !== null) {
+      sendKeyEvent(true, keysym);
+    }
+  });
+
+  window.addEventListener('keyup', (e) => {
+    if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+    const keysym = mapKeyToKeysym(e.key);
+    if (keysym !== null) {
+      sendKeyEvent(false, keysym);
+    }
+  });
 
   // ============================================================================
   // Hardware Keys & ADB Actions

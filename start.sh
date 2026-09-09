@@ -248,6 +248,7 @@ if [ "$START_EMULATOR" = true ]; then
         -net nic,model=virtio \
         -net "user,hostfwd=tcp:127.0.0.1:${ADB_PORT}-:5555" \
         -vnc "127.0.0.1:0" \
+        -monitor "tcp:127.0.0.1:4444,server,nowait" \
         -serial file:"$DATA_DIR/logs/qemu_serial.log" \
         > "$EMULATOR_LOG" 2>&1 &
     
@@ -262,6 +263,18 @@ if [ "$START_EMULATOR" = true ]; then
             cat "$EMULATOR_LOG" | tee -a "$SYSTEM_LOG"
         fi
         echo "CRASHED" > "$STATE_FILE"
+    fi
+
+    # Automatically send ENTER key to QEMU monitor after 6s to select "Live CD" from the ISO menu
+    if [ -n "$BOOT_ISO" ]; then
+        (
+            echo "[AUTO-BOOT] Waiting 6s for Android-x86 ISO bootloader menu..." >> "$SYSTEM_LOG"
+            sleep 6
+            echo "[AUTO-BOOT] Sending ENTER key to bootloader..." >> "$SYSTEM_LOG"
+            echo "sendkey ret" | socat - TCP:127.0.0.1:4444 2>/dev/null || true
+            sleep 2
+            echo "sendkey ret" | socat - TCP:127.0.0.1:4444 2>/dev/null || true
+        ) &
     fi
 
     # Start ADB daemon
