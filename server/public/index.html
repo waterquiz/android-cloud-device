@@ -26,6 +26,9 @@
           <input type="password" id="tokenInput" placeholder="Access Token" value="Fraz1234" />
           <button id="saveTokenBtn" class="btn btn-secondary btn-sm">Save Token</button>
         </div>
+        <button id="toggleOverlayBtn" class="btn btn-secondary btn-sm" title="Toggle overlay to view boot screen">
+          👁️ Toggle Screen
+        </button>
         <button id="refreshStatusBtn" class="btn btn-secondary btn-sm" title="Refresh status">
           🔄 Refresh
         </button>
@@ -47,6 +50,7 @@
                 <div id="overlaySpinner" class="spinner"></div>
                 <h3 id="overlayTitle">Device Disconnected</h3>
                 <p id="overlayMessage">Checking connection to Android VM...</p>
+                <button id="overlayDismissBtn" class="btn btn-secondary btn-sm" style="margin-top: 14px; cursor: pointer;">👁️ View Screen Output</button>
               </div>
             </div>
           </div>
@@ -142,6 +146,33 @@
             <div class="status-item">
               <span class="status-label">Storage (/data):</span>
               <span id="statDisk" class="status-value">-</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">Android OS Image:</span>
+              <span id="statOsImage" class="status-value">-</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Android OS Image Setup Card -->
+        <div class="card" id="imageManagerCard">
+          <div class="card-header">
+            <h3>Android OS Image Setup</h3>
+          </div>
+          <div class="card-body">
+            <p style="font-size: 13px; color: var(--text-muted, #aaa); margin-bottom: 12px; line-height: 1.4;">
+              Provide an Android-x86 ISO or disk image to run on this cloud device.
+            </p>
+            <div style="margin-bottom: 10px;">
+              <label for="imageDownloadUrl" style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">Direct Image / ISO URL:</label>
+              <div style="display: flex; gap: 8px;">
+                <input type="text" id="imageDownloadUrl" placeholder="https://example.com/android-x86.iso" style="flex: 1; padding: 7px 10px; border-radius: 4px; border: 1px solid #444; background: #1a1a24; color: #fff; font-size: 13px;" />
+                <button id="btnDownloadImage" class="btn btn-primary btn-sm">Download</button>
+              </div>
+            </div>
+            <div id="imageDownloadStatus" style="font-size: 12px; margin-top: 6px;"></div>
+            <div style="font-size: 11px; color: #777; margin-top: 8px; line-height: 1.4;">
+              💡 <em>Tip: You can also set the <code>ANDROID_IMAGE_URL</code> variable directly in Railway. Downloads are stored in persistent volume <code>/data/android/</code>.</em>
             </div>
           </div>
         </div>

@@ -120,7 +120,34 @@ async function getDeviceStatus() {
         diagnostic = lines.slice(-3).join(' | ') || 'QEMU emulator exited unexpectedly.';
       } catch (e) {}
     }
+  } else if (state === 'MISSING_IMAGE') {
+    diagnostic = 'No bootable Android image found in /data/android/. Upload an Android-x86 ISO or specify ANDROID_IMAGE_URL.';
+  } else if (state === 'BOOT_TIMEOUT') {
+    diagnostic = 'Android OS boot signal was not detected within timeout. Click "Toggle Screen" to view the live boot output.';
   }
+
+  // Detect available Android OS images in /data/android/
+  let osImage = { found: false, name: 'None', sizeMb: 0, type: 'None' };
+  try {
+    const androidDir = path.join(DATA_DIR, 'android');
+    if (fs.existsSync(androidDir)) {
+      const files = fs.readdirSync(androidDir);
+      for (const f of files) {
+        const full = path.join(androidDir, f);
+        const stat = fs.statSync(full);
+        if (f.endsWith('.iso') && stat.size > 1024 * 1024) {
+          osImage = { found: true, name: f, sizeMb: Math.round(stat.size / (1024 * 1024)), type: 'ISO (Live/Install)' };
+          break;
+        } else if (f === 'system.img' && stat.size > 1024 * 1024) {
+          osImage = { found: true, name: f, sizeMb: Math.round(stat.size / (1024 * 1024)), type: 'Raw Disk Image' };
+          break;
+        } else if (f === 'system.qcow2' && stat.size > 5 * 1024 * 1024) {
+          osImage = { found: true, name: f, sizeMb: Math.round(stat.size / (1024 * 1024)), type: 'QCOW2 Disk' };
+          break;
+        }
+      }
+    }
+  } catch (e) {}
 
   // Read disk usage
   let diskUsage = { freeMb: 0, totalMb: 0 };
@@ -142,7 +169,8 @@ async function getDeviceStatus() {
     boot_completed: bootCompleted,
     uptime_seconds: Math.round(process.uptime()),
     disk_usage: diskUsage,
-    diagnostic: lastDiagnostic,
+    os_image: osImage,
+    diagnostic: diagnostic || lastDiagnostic,
     auth_enabled: Boolean(ACCESS_TOKEN)
   };
 }
@@ -259,6 +287,64 @@ const server = http.createServer(async (req, res) => {
       await execCommand('adb', ['-s', `127.0.0.1:${ADB_PORT}`, 'reboot']);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, message: 'Restart triggered.' }));
+      return;
+    }
+
+    // POST /api/image/download
+    if (req.method === 'POST' && pathname === '/api/image/download') {
+      let body = '';
+      req.on('data', chunk => body += chunk);
+      req.on('end', async () => {
+        try {
+          const data = JSON.parse(body);
+          const dlUrl = data.url && data.url.trim();
+          if (!dlUrl || (!dlUrl.startsWith('http://') && !dlUrl.startsWith('https://'))) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'A valid http:// or https:// download URL is required.' }));
+            return;
+          }
+
+          const androidDir = path.join(DATA_DIR, 'android');
+          if (!fs.existsSync(androidDir)) fs.mkdirSync(androidDir, { recursive: true });
+
+          const tempTarget = path.join(androidDir, 'image.download');
+          if (fs.existsSync(tempTarget)) fs.unlinkSync(tempTarget);
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, message: 'Download initiated. Watch System Logs for progress.' }));
+
+          const logStream = fs.createWriteStream(path.join(LOGS_DIR, 'system.log'), { flags: 'a' });
+          logStream.write(`\n[DOWNLOAD] Starting download from ${dlUrl}...\n`);
+
+          const curlProcess = spawn('curl', ['-fL', '--progress-bar', dlUrl, '-o', tempTarget]);
+          curlProcess.stdout.pipe(logStream);
+          curlProcess.stderr.pipe(logStream);
+
+          curlProcess.on('close', (code) => {
+            if (code === 0) {
+              logStream.write(`\n[DOWNLOAD] Download finished. Determining file type...\n`);
+              const lower = dlUrl.toLowerCase();
+              if (lower.includes('.iso')) {
+                fs.renameSync(tempTarget, path.join(androidDir, 'android.iso'));
+                logStream.write(`[DOWNLOAD] Successfully saved android.iso. Restart container to boot into Android.\n`);
+              } else if (lower.includes('.qcow2')) {
+                fs.renameSync(tempTarget, path.join(androidDir, 'system.qcow2'));
+                logStream.write(`[DOWNLOAD] Successfully saved system.qcow2. Restart container to boot into Android.\n`);
+              } else {
+                fs.renameSync(tempTarget, path.join(androidDir, 'system.img'));
+                logStream.write(`[DOWNLOAD] Successfully saved system.img. Restart container to boot into Android.\n`);
+              }
+              fs.writeFileSync(STATE_FILE, 'STOPPED');
+            } else {
+              logStream.write(`\n[DOWNLOAD] Download failed with exit code ${code}.\n`);
+              if (fs.existsSync(tempTarget)) fs.unlinkSync(tempTarget);
+            }
+          });
+        } catch (e) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON payload' }));
+        }
+      });
       return;
     }
 

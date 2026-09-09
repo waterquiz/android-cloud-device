@@ -18,6 +18,8 @@ _ENV_ADB_PORT="$ADB_PORT"
 _ENV_VNC_PORT="$VNC_PORT"
 _ENV_DATA_DIR="$DATA_DIR"
 _ENV_PORT="$PORT"
+_ENV_ANDROID_IMAGE_URL="$ANDROID_IMAGE_URL"
+_ENV_BOOT_TIMEOUT_SECONDS="$BOOT_TIMEOUT_SECONDS"
 
 # Load configuration file if present
 CONF_FILE="/app/config/device.conf"
@@ -37,12 +39,18 @@ ADB_PORT="${_ENV_ADB_PORT:-${ADB_PORT:-5555}}"
 VNC_PORT="${_ENV_VNC_PORT:-${VNC_PORT:-5900}}"
 DATA_DIR="${_ENV_DATA_DIR:-${DATA_DIR:-/data}}"
 PORT="${_ENV_PORT:-${PORT:-8080}}"
+ANDROID_IMAGE_URL="${_ENV_ANDROID_IMAGE_URL:-${ANDROID_IMAGE_URL:-}}"
+BOOT_TIMEOUT_SECONDS="${_ENV_BOOT_TIMEOUT_SECONDS:-${BOOT_TIMEOUT_SECONDS:-600}}"
 
-export ACCESS_TOKEN ALLOW_SOFTWARE_EMULATION RAM_SIZE CPU_CORES DISK_SIZE ADB_PORT VNC_PORT DATA_DIR PORT
+export ACCESS_TOKEN ALLOW_SOFTWARE_EMULATION RAM_SIZE CPU_CORES DISK_SIZE ADB_PORT VNC_PORT DATA_DIR PORT ANDROID_IMAGE_URL BOOT_TIMEOUT_SECONDS
 
 echo "[CONFIG] RAM: ${RAM_SIZE}MB | Cores: ${CPU_CORES} | Port: ${PORT}"
 echo "[CONFIG] Allow Software Emulation: ${ALLOW_SOFTWARE_EMULATION}"
 echo "[CONFIG] Storage directory: ${DATA_DIR}"
+if [ -n "$ANDROID_IMAGE_URL" ]; then
+    echo "[CONFIG] Android Image URL: ${ANDROID_IMAGE_URL}"
+fi
+echo "[CONFIG] Boot timeout: ${BOOT_TIMEOUT_SECONDS}s"
 
 # ------------------------------------------------------------------------------
 # 1. Dependency Checks
@@ -123,9 +131,87 @@ else
 fi
 
 # ------------------------------------------------------------------------------
-# 4. Initialize Virtual Disks (if starting emulator)
+# 4. Initialize Virtual Disks & Image Detection (if starting emulator)
 # ------------------------------------------------------------------------------
 QEMU_PID=""
+
+if [ "$START_EMULATOR" = true ]; then
+    # Clean up any dummy/empty system.qcow2 (< 5MB) created by earlier versions
+    if [ -f "$DATA_DIR/android/system.qcow2" ]; then
+        FILE_SIZE_KB=$(du -k "$DATA_DIR/android/system.qcow2" 2>/dev/null | cut -f1 || echo 0)
+        if [ "$FILE_SIZE_KB" -lt 5120 ]; then
+            echo "[CLEANUP] Detected previous empty dummy disk ($FILE_SIZE_KB KB). Removing..."
+            rm -f "$DATA_DIR/android/system.qcow2"
+        fi
+    fi
+
+    # Auto-download Android image if ANDROID_IMAGE_URL is specified and no image exists
+    if [ -n "$ANDROID_IMAGE_URL" ]; then
+        EXISTING_IMG=$(find "$DATA_DIR/android" -maxdepth 1 -type f \( -name "*.iso" -o -name "*.img" -o -name "*.qcow2" \) 2>/dev/null | head -n 1 || true)
+        if [ -z "$EXISTING_IMG" ]; then
+            echo "================================================================================"
+            echo "[DOWNLOAD] Fetching Android OS image from: $ANDROID_IMAGE_URL"
+            echo "================================================================================"
+            TEMP_DL="$DATA_DIR/android/image.download"
+            rm -f "$TEMP_DL"
+            if curl -fL --progress-bar "$ANDROID_IMAGE_URL" -o "$TEMP_DL"; then
+                if (command -v file >/dev/null 2>&1 && file "$TEMP_DL" | grep -qi "ISO 9660") || [[ "$ANDROID_IMAGE_URL" == *.iso* ]]; then
+                    mv "$TEMP_DL" "$DATA_DIR/android/android.iso"
+                    echo "[DOWNLOAD] Successfully saved bootable ISO: $DATA_DIR/android/android.iso"
+                elif (command -v file >/dev/null 2>&1 && file "$TEMP_DL" | grep -qi "QCOW") || [[ "$ANDROID_IMAGE_URL" == *.qcow2* ]]; then
+                    mv "$TEMP_DL" "$DATA_DIR/android/system.qcow2"
+                    echo "[DOWNLOAD] Successfully saved QCOW2 disk: $DATA_DIR/android/system.qcow2"
+                else
+                    mv "$TEMP_DL" "$DATA_DIR/android/system.img"
+                    echo "[DOWNLOAD] Successfully saved system image: $DATA_DIR/android/system.img"
+                fi
+            else
+                echo "[ERROR] Failed to download image from $ANDROID_IMAGE_URL" | tee -a "$SYSTEM_LOG"
+                rm -f "$TEMP_DL"
+            fi
+        else
+            echo "[STORAGE] Existing OS image found ($EXISTING_IMG), skipping auto-download."
+        fi
+    fi
+
+    # Locate bootable Android ISO or disk image
+    BOOT_ISO=""
+    BOOT_DISK=""
+
+    # 1. Search for ISO file
+    FOUND_ISO=$(find "$DATA_DIR/android" -maxdepth 1 -type f -name "*.iso" 2>/dev/null | head -n 1 || true)
+    if [ -n "$FOUND_ISO" ] && [ -s "$FOUND_ISO" ]; then
+        BOOT_ISO="$FOUND_ISO"
+        echo "[STORAGE] Found bootable Android ISO: $BOOT_ISO"
+    # 2. Search for raw/sparse disk image
+    elif [ -f "$DATA_DIR/android/system.img" ] && [ -s "$DATA_DIR/android/system.img" ]; then
+        BOOT_DISK="$DATA_DIR/android/system.img"
+        echo "[STORAGE] Found Android system image: $BOOT_DISK"
+    # 3. Search for QCOW2 disk image (> 5MB)
+    elif [ -f "$DATA_DIR/android/system.qcow2" ] && [ -s "$DATA_DIR/android/system.qcow2" ]; then
+        FILE_SIZE_KB=$(du -k "$DATA_DIR/android/system.qcow2" 2>/dev/null | cut -f1 || echo 0)
+        if [ "$FILE_SIZE_KB" -gt 5120 ]; then
+            BOOT_DISK="$DATA_DIR/android/system.qcow2"
+            echo "[STORAGE] Found Android system disk: $BOOT_DISK"
+        fi
+    fi
+
+    if [ -z "$BOOT_ISO" ] && [ -z "$BOOT_DISK" ]; then
+        echo "================================================================================"
+        echo "❌ [ERROR] NO BOOTABLE ANDROID IMAGE FOUND IN $DATA_DIR/android/"
+        echo "--------------------------------------------------------------------------------"
+        echo "QEMU requires an Android OS image (e.g., android.iso, system.img, or system.qcow2)."
+        echo "Without an OS image, QEMU halts at BIOS with 'No bootable device'."
+        echo ""
+        echo "To resolve this, choose one of the following:"
+        echo "1. Set ANDROID_IMAGE_URL in Railway Variables to a direct download link."
+        echo "   (e.g., an Android-x86 7.1 or 9.0 ISO)"
+        echo "2. Or provide/upload an Android-x86 ISO directly via the web dashboard."
+        echo "================================================================================"
+        echo "MISSING_IMAGE" > "$STATE_FILE"
+        START_EMULATOR=false
+    fi
+fi
 
 if [ "$START_EMULATOR" = true ]; then
     echo "BOOTING" > "$STATE_FILE"
@@ -136,17 +222,15 @@ if [ "$START_EMULATOR" = true ]; then
         qemu-img create -f qcow2 "$DATA_IMAGE" "$DISK_SIZE" >> "$SYSTEM_LOG" 2>&1
     fi
 
-    # Check for system image or create virtual disk
-    SYSTEM_IMAGE="$DATA_DIR/android/system.img"
-    if [ ! -f "$SYSTEM_IMAGE" ]; then
-        echo "[STORAGE] Preparing base system disk ($SYSTEM_IMAGE)..."
-        # If no custom image is supplied, create a bootable sparse raw disk
-        qemu-img create -f qcow2 "$DATA_DIR/android/system.qcow2" 4G >> "$SYSTEM_LOG" 2>&1
-        SYSTEM_IMAGE="$DATA_DIR/android/system.qcow2"
-    fi
-
     echo "[EMULATOR] Launching Android QEMU instance..."
     echo "[EMULATOR] Accelerator: $QEMU_ACCEL | Cores: $CPU_CORES | RAM: ${RAM_SIZE}M"
+
+    QEMU_BOOT_ARGS=()
+    if [ -n "$BOOT_ISO" ]; then
+        QEMU_BOOT_ARGS+=(-cdrom "$BOOT_ISO" -boot d -drive "file=${DATA_IMAGE},if=virtio")
+    else
+        QEMU_BOOT_ARGS+=(-drive "file=${BOOT_DISK},if=virtio" -drive "file=${DATA_IMAGE},if=virtio")
+    fi
 
     # Start QEMU in background
     # - Display: VNC on 127.0.0.1:0 (port 5900)
@@ -160,8 +244,7 @@ if [ "$START_EMULATOR" = true ]; then
         -vga std \
         -usb \
         -device usb-tablet \
-        -drive "file=${SYSTEM_IMAGE},if=virtio" \
-        -drive "file=${DATA_IMAGE},if=virtio" \
+        "${QEMU_BOOT_ARGS[@]}" \
         -net nic,model=virtio \
         -net "user,hostfwd=tcp:127.0.0.1:${ADB_PORT}-:5555" \
         -vnc "127.0.0.1:0" \
@@ -187,10 +270,9 @@ if [ "$START_EMULATOR" = true ]; then
 
     # Background monitoring loop for boot completion
     (
-        echo "[BOOT-MONITOR] Monitoring Android boot completion..." >> "$SYSTEM_LOG"
-        MAX_WAIT=120
+        echo "[BOOT-MONITOR] Monitoring Android boot completion (Timeout: ${BOOT_TIMEOUT_SECONDS}s)..." >> "$SYSTEM_LOG"
         ELAPSED=0
-        while [ $ELAPSED -lt $MAX_WAIT ]; do
+        while [ "$ELAPSED" -lt "$BOOT_TIMEOUT_SECONDS" ]; do
             if [ -n "$QEMU_PID" ] && ! kill -0 "$QEMU_PID" 2>/dev/null; then
                 echo "[BOOT-MONITOR] QEMU process terminated unexpectedly." >> "$SYSTEM_LOG"
                 echo "CRASHED" > "$STATE_FILE"
@@ -204,14 +286,19 @@ if [ "$START_EMULATOR" = true ]; then
             BOOT_STATE=$(echo "$BOOT_STATE" | tr -d '\r\n')
             
             if [ "$BOOT_STATE" = "1" ]; then
-                echo "[BOOT-MONITOR] Android successfully completed boot!" >> "$SYSTEM_LOG"
+                echo "[BOOT-MONITOR] Android successfully completed boot after ${ELAPSED}s!" >> "$SYSTEM_LOG"
                 echo "RUNNING" > "$STATE_FILE"
                 exit 0
             fi
             sleep 3
             ELAPSED=$((ELAPSED + 3))
         done
-        echo "[BOOT-MONITOR] Boot wait finished (or still initializing in background)." >> "$SYSTEM_LOG"
+
+        echo "[BOOT-MONITOR] Boot wait timeout reached (${BOOT_TIMEOUT_SECONDS}s)." >> "$SYSTEM_LOG"
+        if [ -n "$QEMU_PID" ] && kill -0 "$QEMU_PID" 2>/dev/null; then
+            echo "[BOOT-MONITOR] QEMU is still running, waiting for user interaction or OS readiness." >> "$SYSTEM_LOG"
+            echo "BOOT_TIMEOUT" > "$STATE_FILE"
+        fi
     ) &
 fi
 

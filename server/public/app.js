@@ -27,6 +27,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const statAdb = document.getElementById('statAdb');
   const statBoot = document.getElementById('statBoot');
   const statDisk = document.getElementById('statDisk');
+  const statOsImage = document.getElementById('statOsImage');
+
+  const toggleOverlayBtn = document.getElementById('toggleOverlayBtn');
+  const overlayDismissBtn = document.getElementById('overlayDismissBtn');
+  const imageDownloadUrl = document.getElementById('imageDownloadUrl');
+  const btnDownloadImage = document.getElementById('btnDownloadImage');
+  const imageDownloadStatus = document.getElementById('imageDownloadStatus');
 
   const diagnosticAlert = document.getElementById('diagnosticAlert');
   const alertHeading = document.getElementById('alertHeading');
@@ -62,6 +69,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let fbWidth = 720;
   let fbHeight = 1280;
   let rfbBuffer = new Uint8Array(0);
+  let userDismissedOverlay = false;
+  let lastSeenState = null;
 
   // Authentication Token Management
   saveTokenBtn.addEventListener('click', () => {
@@ -101,13 +110,43 @@ document.addEventListener('DOMContentLoaded', () => {
       statBoot.textContent = data.boot_completed ? 'Yes (sys.boot_completed=1)' : 'No';
       statDisk.textContent = `${data.disk_usage.freeMb} MB free / ${data.disk_usage.totalMb} MB total`;
 
-      // Update badge
+      if (data.os_image && statOsImage) {
+        if (data.os_image.found) {
+          statOsImage.textContent = `${data.os_image.name} (${data.os_image.sizeMb} MB, ${data.os_image.type})`;
+          statOsImage.style.color = 'var(--status-running, #22c55e)';
+        } else {
+          statOsImage.textContent = 'None detected (requires ISO/image)';
+          statOsImage.style.color = 'var(--status-error, #ef4444)';
+        }
+      }
+
+      // Automatically connect VNC whenever QEMU is running (booting, running, or boot timeout)
+      const canConnectVnc = ['RUNNING', 'BOOTING', 'BOOT_TIMEOUT'].includes(data.state);
+      if (canConnectVnc && !isWsConnected) {
+        connectVnc();
+      }
+
+      // Reset overlay dismissal if state changed (unless transitioning to RUNNING)
+      if (lastSeenState !== data.state) {
+        lastSeenState = data.state;
+        if (data.state === 'RUNNING') {
+          userDismissedOverlay = true;
+        }
+      }
+
+      // Update badge and overlay based on state
       if (data.state === 'RUNNING') {
         setDeviceBadge('RUNNING', 'status-running');
-        if (!isWsConnected) connectVnc();
+        hideOverlay();
       } else if (data.state === 'BOOTING') {
         setDeviceBadge('BOOTING', 'status-booting');
-        setOverlay('Android Booting', 'Waiting for Android OS to complete startup...', true);
+        setOverlay('Android Booting', 'Waiting for Android OS to complete startup... (Click below to view boot output)', true);
+      } else if (data.state === 'MISSING_IMAGE') {
+        setDeviceBadge('MISSING IMAGE', 'status-error');
+        setOverlay('No Bootable Android Image Found', 'The virtual hard drive is empty. Provide an Android-x86 ISO URL under "Android OS Image Setup" or set ANDROID_IMAGE_URL in Railway.', false);
+      } else if (data.state === 'BOOT_TIMEOUT') {
+        setDeviceBadge('BOOT TIMEOUT', 'status-warning');
+        setOverlay('Boot Timeout', 'Android is taking longer than expected. Click "View Screen Output" to inspect the console or GRUB menu.', false);
       } else if (data.state === 'CRASHED') {
         setDeviceBadge('CRASHED', 'status-error');
         setOverlay('Emulator Failed', data.diagnostic || 'QEMU process exited unexpectedly. Check logs below.', false);
@@ -147,12 +186,30 @@ document.addEventListener('DOMContentLoaded', () => {
     overlayTitle.textContent = title;
     overlayMessage.textContent = message;
     overlaySpinner.style.display = showSpinner ? 'block' : 'none';
-    screenOverlay.classList.remove('hidden');
+    if (!userDismissedOverlay) {
+      screenOverlay.classList.remove('hidden');
+    }
   }
 
   function hideOverlay() {
     screenOverlay.classList.add('hidden');
   }
+
+  function toggleOverlay() {
+    if (screenOverlay.classList.contains('hidden')) {
+      screenOverlay.classList.remove('hidden');
+      userDismissedOverlay = false;
+    } else {
+      screenOverlay.classList.add('hidden');
+      userDismissedOverlay = true;
+    }
+  }
+
+  if (toggleOverlayBtn) toggleOverlayBtn.addEventListener('click', toggleOverlay);
+  if (overlayDismissBtn) overlayDismissBtn.addEventListener('click', () => {
+    screenOverlay.classList.add('hidden');
+    userDismissedOverlay = true;
+  });
 
   // ============================================================================
   // WebSocket VNC Client Implementation
@@ -631,6 +688,49 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchStatus();
     fetchInstalledApps();
   });
+
+  // OS Image Download Handler
+  if (btnDownloadImage && imageDownloadUrl) {
+    btnDownloadImage.addEventListener('click', async () => {
+      const url = imageDownloadUrl.value.trim();
+      if (!url) {
+        if (imageDownloadStatus) {
+          imageDownloadStatus.textContent = 'Please enter a direct image URL.';
+          imageDownloadStatus.style.color = '#ef4444';
+        }
+        return;
+      }
+
+      btnDownloadImage.disabled = true;
+      if (imageDownloadStatus) {
+        imageDownloadStatus.textContent = 'Requesting download...';
+        imageDownloadStatus.style.color = '#38bdf8';
+      }
+
+      try {
+        const res = await fetch('/api/image/download', {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({ url })
+        });
+        const resp = await res.json();
+        if (!res.ok) throw new Error(resp.error || 'Download failed');
+        if (imageDownloadStatus) {
+          imageDownloadStatus.textContent = resp.message || 'Download started! Watch System Logs for progress.';
+          imageDownloadStatus.style.color = '#22c55e';
+        }
+        showToast('Image download started');
+        fetchStatus();
+      } catch (err) {
+        if (imageDownloadStatus) {
+          imageDownloadStatus.textContent = `Error: ${err.message}`;
+          imageDownloadStatus.style.color = '#ef4444';
+        }
+      } finally {
+        btnDownloadImage.disabled = false;
+      }
+    });
+  }
 
   // Logs
   let logsVisible = true;

@@ -168,8 +168,10 @@ Configure these under the **Variables** tab in your Railway service:
 | Variable | Default | Required | Description |
 | :--- | :--- | :--- | :--- |
 | `PORT` | `8080` | Automatic | Injected automatically by Railway. Binds web server to `0.0.0.0:$PORT`. |
-| `ACCESS_TOKEN` | *Empty* | Recommended | Secret token required to authenticate to the dashboard and API. |
-| `ALLOW_SOFTWARE_EMULATION` | `false` | Optional | Set to `true` to run Android without hardware virtualization (`/dev/kvm`). |
+| `ACCESS_TOKEN` | `Fraz1234` | Recommended | Secret token required to authenticate to the dashboard and API. |
+| `ALLOW_SOFTWARE_EMULATION` | `true` | Optional | Set to `true` to run Android without hardware virtualization (`/dev/kvm`). |
+| `ANDROID_IMAGE_URL` | *Empty* | Recommended | Direct URL to download an Android-x86 ISO/image (e.g. Android 7.1 or 9.0) into `/data/android/`. |
+| `BOOT_TIMEOUT_SECONDS` | `600` | Optional | Maximum seconds to wait for Android boot completion before showing status timeout. |
 | `MAX_UPLOAD_MB` | `250` | Optional | Maximum allowed APK upload size in megabytes. |
 | `RAM_SIZE` | `2048` | Optional | Device RAM allocation in megabytes (e.g. `2048`). |
 | `CPU_CORES` | `2` | Optional | Number of virtual CPU cores allocated to Android. |
@@ -237,6 +239,13 @@ curl -X POST "https://<your-service>.up.railway.app/api/apks/launch" \
 - Ensure the file is a valid Android APK compiled for `x86_64` or universal architecture (ARM APKs require an ARM translation library).
 - Verify the APK size is within `MAX_UPLOAD_MB`.
 - Check `adb` output in the web console.
+
+### Screen Shows "No Bootable Device" or Infinite "Android Booting"
+- **Cause:** No bootable Android OS image exists in `/data/android/`. An empty virtual disk has no operating system.
+- **Fix:**
+  1. Click **Toggle Screen** on the dashboard to view the actual QEMU console.
+  2. Provide a bootable image URL using the **Android OS Image Setup** card on the web dashboard or set `ANDROID_IMAGE_URL` in Railway Variables (e.g., an Android-x86 7.1 or 9.0 ISO).
+  3. Once downloaded, restart the container to boot into Android.
 
 ### VNC Screen Shows "Display Disconnected"
 - Check the **System Diagnostics** panel. If the state is `BOOTING`, the Android OS is still loading its graphical user interface.
