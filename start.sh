@@ -241,7 +241,7 @@ if [ "$START_EMULATOR" = true ]; then
         $QEMU_ACCEL \
         -m "${RAM_SIZE}" \
         -smp "${CPU_CORES}" \
-        -vga std \
+        -vga virtio \
         -usb \
         -device usb-tablet \
         "${QEMU_BOOT_ARGS[@]}" \

@@ -626,11 +626,29 @@ const server = http.createServer(async (req, res) => {
     // GET /api/device/logs
     if (req.method === 'GET' && pathname === '/api/device/logs') {
       let logs = [];
+      const sysLogPath = path.join(LOGS_DIR, 'system.log');
       const emuLogPath = path.join(LOGS_DIR, 'emulator.log');
-      if (fs.existsSync(emuLogPath)) {
+      const serialLogPath = path.join(LOGS_DIR, 'qemu_serial.log');
+
+      if (fs.existsSync(sysLogPath)) {
+        try {
+          const content = fs.readFileSync(sysLogPath, 'utf8');
+          logs.push('=== SYSTEM LOG ===');
+          logs.push(...content.split('\n').slice(-40));
+        } catch (e) {}
+      }
+
+      if (fs.existsSync(serialLogPath)) {
+        try {
+          const content = fs.readFileSync(serialLogPath, 'utf8');
+          logs.push('=== KERNEL & ANDROID CONSOLE LOG ===');
+          logs.push(...content.split('\n').slice(-60));
+        } catch (e) {}
+      } else if (fs.existsSync(emuLogPath)) {
         try {
           const content = fs.readFileSync(emuLogPath, 'utf8');
-          logs = content.split('\n').slice(-100);
+          logs.push('=== QEMU LOG ===');
+          logs.push(...content.split('\n').slice(-40));
         } catch (e) {}
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
