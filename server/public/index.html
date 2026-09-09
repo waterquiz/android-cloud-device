@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Android Cloud Device - Railway</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="logo">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+            <line x1="12" y1="18" x2="12" y2="18"></line>
+          </svg>
+          <h1>Android Cloud Device</h1>
+        </div>
+        <span id="deviceBadge" class="status-badge status-loading">Checking Status...</span>
+      </div>
+
+      <div class="header-right">
+        <div class="token-wrapper">
+          <input type="password" id="tokenInput" placeholder="Access Token (if set)" />
+          <button id="saveTokenBtn" class="btn btn-secondary btn-sm">Save Token</button>
+        </div>
+        <button id="refreshStatusBtn" class="btn btn-secondary btn-sm" title="Refresh status">
+          🔄 Refresh
+        </button>
+        <button id="restartDeviceBtn" class="btn btn-warning btn-sm" title="Restart device">
+          ⚡ Restart Device
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Grid -->
+    <main class="main-layout">
+      <!-- Left Column: Android Screen & Hardware Controls -->
+      <section class="device-column">
+        <div class="device-frame">
+          <div class="device-screen-wrapper">
+            <canvas id="screenCanvas" width="720" height="1280"></canvas>
+            <div id="screenOverlay" class="screen-overlay">
+              <div class="overlay-card">
+                <div id="overlaySpinner" class="spinner"></div>
+                <h3 id="overlayTitle">Device Disconnected</h3>
+                <p id="overlayMessage">Checking connection to Android VM...</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Android Virtual Navigation Bar -->
+          <div class="device-nav-bar">
+            <button class="nav-btn" id="btnBack" title="Back (Keyevent 4)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+              <span>Back</span>
+            </button>
+            <button class="nav-btn" id="btnHome" title="Home (Keyevent 3)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+              </svg>
+              <span>Home</span>
+            </button>
+            <button class="nav-btn" id="btnRecents" title="Recents / App Switcher (Keyevent 187)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="5" y="5" width="14" height="14" rx="2"></rect>
+              </svg>
+              <span>Recents</span>
+            </button>
+            <button class="nav-btn" id="btnVolDown" title="Volume Down (Keyevent 25)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+              </svg>
+              <span>Vol -</span>
+            </button>
+            <button class="nav-btn" id="btnVolUp" title="Volume Up (Keyevent 24)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+              </svg>
+              <span>Vol +</span>
+            </button>
+            <button class="nav-btn" id="btnPower" title="Power (Keyevent 26)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+                <line x1="12" y1="2" x2="12" y2="12"></line>
+              </svg>
+              <span>Power</span>
+            </button>
+          </div>
+
+          <!-- Quick Text Input Sender -->
+          <div class="quick-text-bar">
+            <input type="text" id="typeTextInput" placeholder="Type text to send to Android..." />
+            <button id="btnSendText" class="btn btn-secondary btn-sm">Send Text</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column: Control Panels, APK Manager, Diagnostics -->
+      <section class="control-column">
+        <!-- Virtualization & Railway Diagnostic Alert -->
+        <div id="diagnosticAlert" class="alert-box alert-warning hidden">
+          <div class="alert-title">
+            <span id="alertIcon">⚠️</span>
+            <strong id="alertHeading">Virtualization Notice</strong>
+          </div>
+          <p id="alertBody"></p>
+        </div>
+
+        <!-- System & Runtime Status Card -->
+        <div class="card">
+          <div class="card-header">
+            <h3>System Diagnostics</h3>
+          </div>
+          <div class="card-body status-grid">
+            <div class="status-item">
+              <span class="status-label">Device State:</span>
+              <span id="statDeviceState" class="status-value">-</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">Virtualization (/dev/kvm):</span>
+              <span id="statKvm" class="status-value">-</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">Software Fallback:</span>
+              <span id="statSoftwareEmu" class="status-value">-</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">ADB Daemon:</span>
+              <span id="statAdb" class="status-value">-</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">Boot Completed:</span>
+              <span id="statBoot" class="status-value">-</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">Storage (/data):</span>
+              <span id="statDisk" class="status-value">-</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- APK Upload & Installer Card -->
+        <div class="card">
+          <div class="card-header">
+            <h3>Install Application (APK)</h3>
+          </div>
+          <div class="card-body">
+            <div id="dropZone" class="drop-zone">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              <p>Drag and drop an <strong>.apk</strong> file here, or click to browse</p>
+              <input type="file" id="apkFileInput" accept=".apk" style="display: none;" />
+              <button id="selectApkBtn" class="btn btn-secondary btn-sm">Select APK File</button>
+            </div>
+
+            <!-- Upload progress & status -->
+            <div id="uploadStatusBox" class="upload-status-box hidden">
+              <div class="progress-bar-bg">
+                <div id="uploadProgressBar" class="progress-bar-fill" style="width: 0%;"></div>
+              </div>
+              <p id="uploadStatusText" class="upload-status-text">Uploading...</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Installed Applications Card -->
+        <div class="card">
+          <div class="card-header flex-between">
+            <h3>Installed Applications</h3>
+            <button id="refreshAppsBtn" class="btn btn-secondary btn-xs">Refresh</button>
+          </div>
+          <div class="card-body">
+            <div id="appsList" class="apps-list">
+              <div class="empty-state">No third-party applications installed yet.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- System & Emulator Logs Card -->
+        <div class="card">
+          <div class="card-header flex-between">
+            <h3>Emulator Logs</h3>
+            <button id="toggleLogsBtn" class="btn btn-secondary btn-xs">Show / Hide</button>
+          </div>
+          <div class="card-body">
+            <pre id="logConsole" class="log-console">Waiting for logs...</pre>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
